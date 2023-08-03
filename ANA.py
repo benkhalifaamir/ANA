@@ -13,7 +13,6 @@ import dateutil.parser
 from datetime import timedelta
 nlp = spacy.load('en_core_web_sm')
 from datetime import date, timedelta
-import requests
 import re
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -32,7 +31,6 @@ import spacy
 
 from bs4 import BeautifulSoup
 import re
-from datetime import datetime
 from dateutil.relativedelta import relativedelta, MO, TU, WE, TH, FR, SA, SU
 
 
