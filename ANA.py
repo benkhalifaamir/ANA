@@ -3,7 +3,6 @@ import requests
 import ast
 import logging
 import io
-import datetime
 import random
 import spacy
 import re
@@ -13,6 +12,7 @@ import dateutil.parser
 from datetime import timedelta
 nlp = spacy.load('en_core_web_sm')
 from datetime import date, timedelta
+import requests
 import re
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -31,6 +31,7 @@ import spacy
 
 from bs4 import BeautifulSoup
 import re
+from datetime import datetime
 from dateutil.relativedelta import relativedelta, MO, TU, WE, TH, FR, SA, SU
 
 
@@ -158,6 +159,41 @@ def alpaca_lora(instruction,input):
     response = requests.post(url, json=data)
    
     return response.json()['data']
+def extract_assistant_content(data):
+    # Check if the key 'choices' exists and if it has at least one item
+    if 'choices' in data and len(data['choices']) > 0:
+        for choice in data['choices']:
+            # Check if 'message' key exists, and if 'role' is 'assistant'
+            if 'message' in choice and choice['message']['role'] == 'assistant':
+                return choice['message']['content']
+    return None
+api_key = 'iCwoxV79yrvBTWK1T5R7:034df4b857e20679a88390f5c1f2001d89691e040fd23e4e7de8410a53246fdc'
+
+def jina(input):
+    data = {
+  "messages": [
+    {
+      "role": "user",
+      "content": input
+    }
+  ]
+}
+
+    response = requests.post(
+    'https://api.chat.jina.ai/v1/chat/completions',
+    headers={
+        "authorization": f"Bearer {api_key}",
+        "content-type": "application/json"
+    },
+    json=data
+    )
+
+    result = response.json()
+    
+    return extract_assistant_content(result).lower()
+    
+
+    
 def mpt30b(input):
     response = requests.post('http://129.128.243.13:25500/generate', json={'query': input
     })
@@ -382,7 +418,7 @@ def predict_label(text):
 
     return predicted   
 def get_answer_box(query):
-    url = f"https://www.google.com/search?q={query.replace(' ', '+')}"
+    url = f"https://www.google.com/search?q={query.replace(' ', '+')}&hl=en"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/88.0.4324.150 Safari/537.36"
     }
@@ -534,7 +570,7 @@ def get_location_and_time():
     # Format the time
     formatted_time = local_time.strftime("%I:%M %p").lstrip("0")
 
-    return f"The current time in {city} is {formatted_time}"  
+    return f"The current time in '{city}' is {formatted_time}"  
 
 def convert_time(time_str):
     # Handle 24-hour format input
@@ -583,12 +619,10 @@ class response :
         self.dictionnaire = dictionnaire or ""
         if self.dictionnaire =="":
             self.dictionnaire= self.dictionnaire +' ' + user_message
-            response = mpt30bclas(f"""Determine with high precision whether this text "{user_message}" is:
-
+            response = jina(f"""Determine with high precision whether this text ""{user_message}"" is:
 - Functionality Query (Example: 'What can you do?' or 'what tasks can you do?')
-- Other inquiry (Example: 'Who won the world series last year?' or 'What's the capital of France?')
-
-In each case, make sure to classify the incoming text as accurately as possible and return only the assigned category from the list.""").lower()
+- Other inquiry (Example: 'i need to remember the doctor’s appointment at the Heart Clinic can you add it to my calendar please?')
+return only the assigned category.""").lower()
             print(response)
             
 
@@ -620,36 +654,18 @@ Remember, I'm here to make your life easier, so don't hesitate to ask for help!"
                 if predicted_label=='factual question'  :
                     logging.info("question")
                     
-                    response = mpt30bclas(f"""Please carefully examine the provided text "{user_message}" and assign it to one of the following categories: 'factual question' or 'not factual question'.
-
-    When assigning a category, ensure your classification is as precise as possible. Here are some guidelines to follow:
-
-    'Factual Question': These are questions that require a definitive, objective answer, usually based on known facts or data. For example:
-    'Who is the current president of the United States?'
-    'What is the capital of Canada?'
-    'When was the Declaration of Independence signed?'
-    
-    'Not Factual Question': These are questions that don't seek objective facts or data. They might be seeking opinions, asking for advice, or making subjective inquiries. For example:
-    'What dish can i make ?'
-    'Can you tell me a joke?'
-    'What's your opinion on climate change?'
-    Your task is to identify whether the question being asked requires a factual answer or not. It's essential that your classification is as accurate as possible.""").lower()
+                    response = jina(f"""Please carefully examine the provided text {user_message} and assign it to one of the following categories: 'factual question' or 'not factual question'.
+return the assigned category""").lower()
                     
                     print(response)
                     if 'not factual question' in response :
-                        response1 = mpt30bclas(f"""Using high precision, categorize this text "{user_message}" into one of the following groups: 
-
-- Joke request (Example: 'Can you share a funny joke?')
-- Weather request (Example: 'What is the forecast in San Francisco next week?')
-- Timing request (Example: 'what time is it right now?')
-- Other (Any request that does not fit into the above categories.)
-
-For each instance, provide the most accurate classification and return only the assigned category from the list.""")
+                        response1 = jina(f"""Please carefully examine the provided text {user_message} and assign it to one of the following categories: Recipe request, Joke request, Weather request, Timing request (what time is it/what day is it today), Other (Any request that does not fit into the above categories.)
+return only the category assigned.""")
                         response1= response1.lower()
                         if 'joke request' in response1 :
                             logging.info ('joke request')
                             
-                            response = mpt30b(f"{user_message}")
+                            response = mpt30b(f'{user_message}')
 
                             self.conversation.append([user_message1,response])
                             self.dictionnaire =''
@@ -662,7 +678,7 @@ For each instance, provide the most accurate classification and return only the 
 
                         elif 'weather request' in response1  :
                             logging.info('weather request')
-                            resp=mpt30b(f'generate a weather sentence with all the details in the input with applying the right and the precise tense : {get_weather(user_message)}')
+                            resp=jina(f"generate a precise response with all the details in the input for the following question : {user_message} based on these informations: {get_weather(user_message)}")
                             logging.info(get_weather(user_message))
                             self.conversation.append([ user_message1, resp] )
                             self.dictionnaire=''
@@ -671,7 +687,7 @@ For each instance, provide the most accurate classification and return only the 
                             return self.conversation, self.dictionnaire, log_stream.getvalue()
                         elif 'timing request' in response1:
                                 logging.info('Timing request')
-                                response = mpt30bclas(f"""Please classify this text "{user_message}" into one of these categories accurately: 'Time Request' (e.g., 'What time is it now?' or 'What's the current time in London?'), or 'Day or Date Request' (e.g., 'What is today's date?' or 'What day of the week is it?'). The system should only return the category label""").lower()
+                                response = jina(f"""Please classify this text {user_message} into one of these categories accurately: 'Time Request' (e.g., 'What time is it now?' or 'What's the current time in London?'), or 'Day or Date Request' (e.g., 'What is today's date?' or 'What day of the week is it?'). The system should only return the category label""").lower()
                                 if 'day or date request' in response:
                                     logging.info('day and date request')
                                     resp = detect_day1(user_message)
@@ -694,7 +710,7 @@ For each instance, provide the most accurate classification and return only the 
                         
                         
                         else :
-                            response = mpt30b(f"{user_message}")
+                            response = mpt30b(f'{user_message}')
                             self.conversation.append([user_message1,  response])
                             self.dictionnaire =''
 
@@ -706,20 +722,13 @@ For each instance, provide the most accurate classification and return only the 
                     
                     else:
                         logging.info('factual question')
-                        alpaca=mpt30bclas(f"""Using high precision, categorize this text "{user_message}" into one of the following groups: 
-
-- Weather request (Example: 'What is the forecast in San Francisco next week?')
-- Timing request (Example: 'what time is it right now?')
-- Recipe request (Example: 'Search for a vegan lasagna recipe.')
-
-- Other (Any request that does not fit into the above categories.)
-
-For each instance, provide the most accurate classification and return only the assigned category from the list.""")
+                        alpaca=jina(f"""Please carefully examine the provided text {user_message} and assign it to one of the following categories: Recipe request, Weather request, Timing request (what time is it/what day is it today), Other (Any request that does not fit into the above categories.)
+return only the category assigned.""")
                         alpaca=alpaca.lower()
                         logging.info(alpaca)
                         print(alpaca)
                         if 'weather request' in alpaca:
-                            resp=mpt30b(f'generate a weather sentence with all the details in the input with applying the right and the precise tense : {get_weather(user_message)}')
+                            resp=jina(f"generate a precise response with all the details in the input for the following question : {user_message} based on these informations: {get_weather(user_message)}")
                             logging.info(get_weather(user_message))
                             self.conversation.append([user_message1, resp] )
                             self.dictionnaire=''
@@ -727,7 +736,7 @@ For each instance, provide the most accurate classification and return only the 
                             return self.conversation, self.dictionnaire, log_stream.getvalue()
                         elif 'timing request' in alpaca:
                                 logging.info('Timing request')
-                                response = mpt30bclas(f"""Please classify this text "{user_message}" into one of these categories accurately: 'Time Request' (e.g., 'What time is it now?' or 'What's the current time in London?'), or 'Day or Date Request' (e.g., 'What is today's date?' or 'What day of the week is it?'). The system should only return the category label""").lower()
+                                response = jina(f"""Please classify this text {user_message} into one of these categories accurately: 'Time Request' (e.g., 'What time is it now?' or 'What's the current time in London?'), or 'Day or Date Request' (e.g., 'What is today's date?' or 'What day of the week is it?'). return the assigned category""").lower()
                                 if 'day or date request' in response:
                                     logging.info('day and date request')
                                     resp = detect_day1(user_message)
@@ -745,7 +754,7 @@ For each instance, provide the most accurate classification and return only the 
                                     return self.conversation, self.dictionnaire, log_stream.getvalue()
                     
                         elif 'recipe request' in alpaca:
-                            response3 = mpt30b(f"{user_message}")    
+                            response3 = mpt30b(f'{user_message}')    
                             self.conversation.append([ user_message1, response3] )
                             self.dictionnaire =''
 
@@ -760,30 +769,21 @@ For each instance, provide the most accurate classification and return only the 
 
                             resource = build("customsearch", 'v1', developerKey=api_key).cse()
                             result = resource.list(q=query, cx='b4c09627286a9479c').execute()
-                            if answer_box== None :
-                                if "items" in result :
-                                    item = result ["items"][0]
-                                    title = item.get("title", "")
-                                    link = item.get("link", "")
-                                    snippet = item.get("snippet", "")
-                                    message1 = f"{snippet}"
+                            if answer_box == None :
                                     
-                                        
-                                    self.conversation.append([ user_message1, message1] )
-                                    self.dictionnaire =''
-                                    self.history.append((user_message, message1))
-                                    return self.conversation, self.dictionnaire, log_stream.getvalue()
-
-                                    
-                                else:
-                                    
-                                    response3 = mpt30b(f"{user_message}")    
+                                    response3 = mpt30b(f'{user_message}')    
                                     self.conversation.append([ user_message1, response3] )
                                     self.dictionnaire =''
 
                                     self.history.append((user_message, response3))
                                     return self.conversation, self.dictionnaire, log_stream.getvalue()
-                            
+                            else :
+                                self.conversation.append([ user_message1, answer_box] )
+                                self.dictionnaire =''
+
+                                self.history.append((user_message, answer_box))
+                                return self.conversation, self.dictionnaire, log_stream.getvalue()
+                                
 
                             
 
@@ -800,19 +800,13 @@ For each instance, provide the most accurate classification and return only the 
                 
                 
                 elif predicted_label =='yes/no question'   :
+                    print(predicted_label)
                     logging.info("yes/no question")
-                    data=mpt30bclas(f"""Using high precision, categorize this text "{user_message}" into one of the following groups: 
-
-- Weather request (Example: 'What is the forecast in San Francisco next week?')
-- Timing request (Example: 'what time is it right now?')
-- Recipe request (Example: 'Search for a vegan lasagna recipe.')
-
-- Other (Any request that does not fit into the above categories.)
-
-For each instance, provide the most accurate classification and return only the assigned category from the list.""")
+                    data=jina(f"""Please carefully examine the provided text {user_message} and assign it to one of the following categories: Recipe request, Weather request, Timing request (what time is it/what day is it today), Other (Any request that does not fit into the above categories.)
+return only the category assigned.""")
                     data=data.lower()
-                    if 'weather request' in data:
-                            resp=alpaca_lora(f"generate a precise response with all the details in the input for the following yes or no question : {user_message}", get_weather(user_message))
+                    if 'weather request.' or 'weather request' in data:
+                            resp=jina(f"generate a precise response with all the details in the input for the following question : {user_message} based on these informations: {get_weather(user_message)}")
                             logging.info(get_weather(user_message))
                             self.conversation.append([user_message1, resp] )
                             self.dictionnaire =''
@@ -822,7 +816,7 @@ For each instance, provide the most accurate classification and return only the 
                     
                     elif 'timing request' in data:
                                 logging.info('Timing request')
-                                response = mpt30bclas(f"""Please classify this text "{user_message}" into one of these categories accurately: 'Time Request' (e.g., 'What time is it now?' or 'What's the current time in London?'), or 'Day or Date Request' (e.g., 'What is today's date?' or 'What day of the week is it?'). The system should only return the category label""").lower()
+                                response = jina(f"""Please classify this text {user_message} into one of these categories accurately: 'Time Request' (e.g., 'What time is it now?' or 'What's the current time in London?'), or 'Day or Date Request' (e.g., 'What is today's date?' or 'What day of the week is it?'). return the assigned category""").lower()
                                 if 'day or date request' in response:
                                     logging.info('day and date request')
                                     resp = detect_day1(user_message)
@@ -839,7 +833,7 @@ For each instance, provide the most accurate classification and return only the 
                                     self.dictionnaire=''
                                     return self.conversation, self.dictionnaire, log_stream.getvalue()
                     elif 'recipe request' in alpaca:
-                            response3 = mpt30b(f"{user_message}")    
+                            response3 = mpt30b(f'{user_message}')    
                             self.conversation.append([ user_message1, response3] )
                             self.dictionnaire =''
 
@@ -847,7 +841,7 @@ For each instance, provide the most accurate classification and return only the 
                             return self.conversation, self.dictionnaire, log_stream.getvalue()
                     
                     else:
-                            response = mpt30b(f"{user_message}")
+                            response = mpt30b(f'{user_message}')
                             self.conversation.append([user_message1,  response])
                             self.dictionnaire=''
                             self.history.append(user_message, response)
@@ -856,17 +850,8 @@ For each instance, provide the most accurate classification and return only the 
                     
                 elif predicted_label=='direct order' or predicted_label=='indirect order' :
                     logging.info('order')
-                    response1 = mpt30bclas(f"""Using high precision, categorize this text {user_message} into one of the following groups: 
-
-- Calendar request (Example: 'remind me to go shopping ')
-- Recipe request (Example: 'Search for a vegan lasagna recipe.')
-- Joke request (Example: 'Can you share a funny joke?')
-- Weather request (Example: 'What is the forecast in San Francisco next week?')
-- Grocery list (Example: 'Put apples on my grocery list.')
-- Timing request (Example: 'what time is it right now?')
-- Other (Any request that does not fit into the above categories.)
-
-For each instance, provide the most accurate classification and return only the assigned category from the list.""")
+                    response1 = jina(f"""Please carefully examine the provided text {user_message} and assign it to one of the following categories: Calendar request (remind me to do something), Recipe request, Joke request, Weather request, Grocery list, Timing request (what time is it/what day is it today), Other (Any request that does not fit into the above categories).
+return only the category assigned.""")
                     data1 = response1
                     data1= data1.lower()
                     print(data1)
@@ -875,7 +860,7 @@ For each instance, provide the most accurate classification and return only the 
                         
                         logging.info('joke request')
 
-                        response = mpt30b(f"{user_message}")
+                        response = mpt30b(f'{user_message}')
 
                         self.conversation.append([user_message1,response])
                         self.dictionnaire =''
@@ -1096,9 +1081,8 @@ For each instance, provide the most accurate classification and return only the 
                             for element in elements:
                                 if element in ma_liste:
                                     ma_liste.remove(element)    
-                        if "add to grocery list" in mpt30bclas(f"""You are tasked with categorizing the given sentence "{user_message}". Determine whether the user is indicating a lack or surplus of an item. If the user's text implies a deficit (e.g., 'I'm out of [item]', 'I need more [item]', etc.), the correct categorization is 'Add to grocery list'. If the user's text implies a surplus (e.g., 'I have plenty of [item]', 'I don't need [item]', etc.), the categorization should be 'Remove from grocery list'.
-
-For instance, if the user says 'I need more bananas', the response should be 'Add to grocery list'. If the user says 'I have too many potatoes', the response should be 'Remove from grocery list'. RETURN ONLY THE ASSIGNED CATEGORY FROM THE LIST""").lower() :
+                        if "add to grocery list" in jina(f"""categorize the given sentence {user_message}. If the user's text implies a deficit (i'm running out of item), the correct categorization is 'Add to grocery list'. If the user's text implies a surplus (i already have item) the categorization should be 'Remove from grocery list'.
+return the assigned category""").lower() :
                             add_list_without_duplicates(a)
                             logging.info("add to the grocery list")
                             logging.info(ma_liste)
@@ -1131,7 +1115,7 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
                             
                     elif 'recipe request' in data1:
                         logging.info("recipe")
-                        food = mpt30b(f"{user_message}")
+                        food = mpt30b(f'{user_message}')
                         query = food
                         
                         self.history.append((message, food))
@@ -1140,7 +1124,7 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
                         return self.conversation, self.dictionnaire, log_stream.getvalue()
                     elif 'timing request' in data1:
                                 logging.info('Timing request')
-                                response = mpt30bclas(f"""Please classify this text "{user_message}" into one of these categories accurately: 'Time Request' (e.g., 'What time is it now?' or 'What's the current time in London?'), or 'Day or Date Request' (e.g., 'What is today's date?' or 'What day of the week is it?'). The system should only return the category label""").lower()
+                                response = jina(f"""Please classify this text {user_message} into one of these categories accurately: 'Time Request' (e.g., 'What time is it now?' or 'What's the current time in London?'), or 'Day or Date Request' (e.g., 'What is today's date?' or 'What day of the week is it?'). return the assigned category""").lower()
                                 if 'day or date request' in response:
                                     logging.info('day and date request')
                                     resp = detect_day1(user_message)
@@ -1158,7 +1142,7 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
                                     return self.conversation, self.dictionnaire, log_stream.getvalue()
                     
                     elif 'weather request' in data1:
-                            resp=mpt30b(f'generate a weather sentence with all the details in the input with applying the right and the precise tense : {get_weather(user_message)}')
+                            resp=jina(f"generate a precise response with all the details in the input for the following question : {user_message} based on these informations: {get_weather(user_message)}")
                             logging.info(get_weather(user_message))
                             self.conversation.append([user_message1, resp] )
                             self.dictionnaire =''
@@ -1168,7 +1152,7 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
                      
                         
                     else : 
-                        response = mpt30b(f"{user_message}") 
+                        response = mpt30b(f'{user_message}') 
                         self.history.append((message, ''.join(response)))
                         self.conversation.append([user_message1,''.join(response)])
                         self.dictionnaire=''    
@@ -1180,9 +1164,8 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
                     
                 elif  predicted_label=='greeting':
                     logging.info('Greeting')
-                    response=mpt30b(f"{user_message}")
+                    response=mpt30b(f'{user_message}')
                     data = response
-                    logging.info("mpt30b response")
                     self.dictionnaire =''
 
 
@@ -1194,27 +1177,27 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
 
                 elif  predicted_label=='statement' :
                     logging.info("statement")
-                    alpaca =mpt30bclas(f"""Using high precision, categorize this text "{user_message}" into one of the following groups: 
-
-- Calendar request (Example: 'remind me to go shopping ')
-- Recipe request (Example: 'Search for a vegan lasagna recipe.')
-- Joke request (Example: 'Can you share a funny joke?')
-- Weather request (Example: 'What is the forecast in San Francisco next week?')
-- Grocery list (Example: 'Put apples on my grocery list.')
-- Timing request (Example: 'what time is it right now?')
-- Other (Any request that does not fit into the above categories.)
-
-For each instance, provide the most accurate classification and return only the assigned category from the list.""").lower()
+                    alpaca =jina(f"""Please carefully examine the provided text "{user_message}" and assign it to one of the following categories: Calendar request (remind to do something), Recipe request, Joke request, Weather request, Grocery list, Timing request (what time is it/what day is it today), Other (Any request that does not fit into the above categories.)
+return the category assigned with a high precision.""").lower()
                     print (alpaca)
                     if 'joke request' in alpaca :
                             
-                        response = mpt30b(f"{user_message}")
+                        response = mpt30b(f'{user_message}')
 
                         self.conversation.append([user_message1,response])
                         self.dictionnaire =''
 
                         self.history.append((user_message, response))
                         return self.conversation, self.dictionnaire, log_stream.getvalue() 
+                    
+                    elif 'weather request' in alpaca:
+                            resp=jina(f"generate a precise response for the elderly person with all the details for the following question : {user_message} based on these informations: {get_weather(user_message)}")
+                            logging.info(get_weather(user_message))
+                            self.conversation.append([user_message1, resp] )
+                            self.dictionnaire =''
+
+                            self.history.append((user_message, resp))
+                            return self.conversation, self.dictionnaire, log_stream.getvalue()
                     
                     elif 'grocery list' in alpaca:
                         logging.info('Grocery')
@@ -1267,15 +1250,14 @@ For each instance, provide the most accurate classification and return only the 
                             for element in elements:
                                 if element in ma_liste:
                                     ma_liste.remove(element)    
-                        if "add to grocery list" in mpt30bclas(f"""You are tasked with categorizing the given sentence "{user_message}". Determine whether the user is indicating a lack or surplus of an item. If the user's text implies a deficit (e.g., 'I'm out of [item]', 'I need more [item]', etc.), the correct categorization is 'Add to grocery list'. If the user's text implies a surplus (e.g., 'I have plenty of [item]', 'I don't need [item]', etc.), the categorization should be 'Remove from grocery list'.
-
-For instance, if the user says 'I need more bananas', the response should be 'Add to grocery list'. If the user says 'I have too many potatoes', the response should be 'Remove from grocery list'. RETURN ONLY THE ASSIGNED CATEGORY FROM THE LIST""").lower() :
+                        if "add to grocery list" in jina(f"""categorize the given sentence {user_message}. If the user's text implies a deficit (i'm running out of item), the correct categorization is 'Add to grocery list'. If the user's text implies a surplus (i already have item) the categorization should be 'Remove from grocery list'.
+return the assigned category""").lower() :
                             logging.info("add to the grocery list")
                             logging.info(ma_liste)
             
                         
                         
-                            answer=f"do you want me to add {data} to the grocery list?"
+                            answer=f"I'm sorry to hear that. Do you want me to add {data} to your grocery list?"
                             self.history.append((message, answer))
                             self.conversation.append([user_message1,answer])
                             return self.conversation, self.dictionnaire, log_stream.getvalue()
@@ -1284,13 +1266,13 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
                             logging.info ("remove from the list")
                             logging.info(ma_liste)
                             if len(ma_liste)<1:
-                                answer=f"but you have nothing on the grocery list"
+                                answer=f"But you have nothing on the grocery list"
                                 self.history.append((message, answer))
                                 self.dictionnaire=''
                                 self.conversation.append([user_message1,answer])
                                 return self.conversation, self.dictionnaire, log_stream.getvalue()
                             else:
-                                answer=f"do you want me to remove {data} from the grocery list?"
+                                answer=f"Do you want me to remove {data} from the grocery list?"
                                 self.history.append((message, answer))
                                 self.conversation.append([user_message1,answer])
                                 return self.conversation, self.dictionnaire, log_stream.getvalue()
@@ -1298,7 +1280,7 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
         
                     elif 'recipe request' in alpaca:
                         logging.info("recipe")
-                        food = mpt30b(f"{user_message}")
+                        food = mpt30b(f'{user_message}')
                         query = food
                         
                         self.history.append((message, food))
@@ -1476,7 +1458,7 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
                     
                     
                     else :
-                        answer = mpt30b(f"{user_message}")
+                        answer = mpt30b(f'{user_message}')
                         logging.info('mpt30b response')
                         self.history.append((message, answer))
                         self.conversation.append([user_message1,answer])
@@ -1484,7 +1466,7 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
                         return self.conversation, self.dictionnaire, log_stream.getvalue()         
                         
                 elif predicted_label=='apology' or predicted_label=='feedback': 
-                    answer = mpt30b(f"""generate a response based on the input : {user_message}""")
+                    answer = mpt30b(f'{user_message}')
                     self.history.append((message, answer))
                     self.conversation.append([user_message1,answer])
                     self.dictionnaire=''
@@ -1492,19 +1474,10 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
             
         else :
             print('else')
-            response1 = mpt30b(f"""Using high precision, categorize this text "{user_message}" into one of the following groups: 
-
-- Calendar request (Example: 'remind me to go shopping ')
-- Recipe request (Example: 'Search for a vegan lasagna recipe.')
-- Joke request (Example: 'Can you share a funny joke?')
-- Weather request (Example: 'What is the forecast in San Francisco next week?')
-- Grocery list (Example: 'Put apples on my grocery list.')
-- Timing request (Example: 'what time is it right now?')
-- Other (Any request that does not fit into the above categories.)
-
-For each instance, provide the most accurate classification and return only the assigned category from the list.""")
+            response1 = jina(f"""Please carefully examine the provided text {self.dictionnaire} and assign it to one of the following categories: Calendar request (remind me to do something), Recipe request, Joke request, Weather request, Grocery list, Timing request (what time is it/what day is it today), Other (Any request that does not fit into the above categories).
+return only the category assigned.""")
             data1 = response1
-            
+            print(data1)
             data1= data1.lower()
             logging.info(data1)  
             global k    
@@ -1550,19 +1523,14 @@ For each instance, provide the most accurate classification and return only the 
             if 'calendar request' in data1:
                     print('calendar')
                     logging.info('calendar request')
-                    data= mpt30bclas(f"""Using high precision, categorize this text "{user_message}" into one of the following groups: 
-
-- Joke request (Example: 'Can you share a funny joke?')
-- Timing request (Example: 'what time is it right now?')
-- Other (Example: 'tomorrow at 5pm')
-
-For each instance, provide the most accurate classification and return only the assigned category from the list.""")
+                    data= jina(f"""Please carefully examine the provided text {user_message} and assign it to one of the following categories: 'Joke request', 'ask request' (example :what time is it?/what day is it today?), 'Other' (example : tomorrow/tomorrow at 5pm/ 10minutes before)
+return the category assigned.""")
                     data = data.lower()
                     print(data)
                     if k==1:
-                        resp = alpaca_lora("""analyze the input to determine whether the sentiment expressed is one of acceptance (agreeing or saying "yes") or rejection (disagreeing or saying "no")""", user_message).lower()
+                        resp = jina(f"""analyze this text "{user_message}" to determine whether the sentiment expressed is one of acceptance (agreeing or saying "yes" or "okay") or rejection (disagreeing or saying "no"). return the sentiment assigned""").lower()
 
-                        if resp == 'acceptance':
+                        if 'acceptance' in resp:
                             set_b('1')
                             
                                 
@@ -1652,10 +1620,10 @@ For each instance, provide the most accurate classification and return only the 
                                     return get_next_day(next_day)  # Call the previous code to get the date of the next day
                             return None
                         def get_next_day(day):
-                            today = datetime.datetime.today()
+                            today = datetime.today()
                             weekday_map = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
                             days_until_next_day = (weekday_map[day.lower()] - today.weekday()) % 7
-                            next_day = today + datetime.timedelta(days=days_until_next_day)
+                            next_day = today + timedelta(days=days_until_next_day)
                             return next_day.strftime("%Y-%m-%d")
                         def set_globals_empty():
                             global day
@@ -1673,7 +1641,7 @@ For each instance, provide the most accurate classification and return only the 
                         set_reminder()   
                         if not day and not time  :
                             print("day and time")
-                            data =f"sure ! i will put the {event} on the calendar! but can you provide me some more informations like the exact day and time?"
+                            data =f"It's no problem. Can you share the exact date and time so I can add this event :{event} to our calendar?"
                             self.history.append((message, ''.join(data)))
                             self.conversation.append([user_message1,''.join(data)])
                             return self.conversation,  self.dictionnaire, log_stream.getvalue()
@@ -1691,7 +1659,7 @@ For each instance, provide the most accurate classification and return only the 
                             return self.conversation,  self.dictionnaire, log_stream.getvalue()
                         elif not reminder:
                             print("reminder")
-                            data = 'Would you like to be reminded before the event?'
+                            data = "Thank You for giving me these informations! Would you appreciate a gentle reminder in advance of the event to ensure you are well-prepared?"
                             self.history.append((message, data))
                             self.conversation.append([user_message1,data])
                             return self.conversation,  self.dictionnaire, log_stream.getvalue()
@@ -1734,7 +1702,7 @@ For each instance, provide the most accurate classification and return only the 
 
                             
                             add_event(event,new_time)
-                            answer = f"The event {event} is set in the calendar on {date_str} at {time_str} with success and you will be reminded at {new_time_str}."
+                            answer = f""""Your event, "{event}", has been successfully scheduled for {date_str} at {time_str}. A reminder has been set for {new_time_str}."""
 
                             self.history.append((message, answer))
                             self.conversation.append([user_message1,answer])
@@ -1746,22 +1714,21 @@ For each instance, provide the most accurate classification and return only the 
                     elif 'joke request' in data :
                         logging.info ('joke request')
                         
-                        response = mpt30b(f"user_message")
+                        response = mpt30b(f"{user_message}")
                         answer=f"Just a gentle reminder that we were setting up something about this event : {event}. Shall we finish that up?"
                         resp=response +'\n'+'\n'+'\n'+ answer
                         self.conversation.append([user_message1,resp])
                         set_k('1')
                         self.history.append((user_message, response))
                         return self.conversation, self.dictionnaire, log_stream.getvalue()
-                    elif 'timing request' in data:
+                    elif 'ask request' in data:
                                 logging.info('Timing request')
-                                response = mpt30bclas(f"""Please classify this text "{user_message}" into one of these categories accurately: 'Time Request' (e.g., 'What time is it now?' or 'What's the current time in London?'), or 'Day or Date Request' (e.g., 'What is today's date?' or 'What day of the week is it?'). The system should only return the category label""").lower()
+                                response = jina(f"""Please classify this text {user_message} into one of these categories accurately: 'Time Request' (e.g., 'What time is it now?' or 'What's the current time in London?'), or 'Day or Date Request' (e.g., 'What is today's date?' or 'What day of the week is it?'). return the assigned category""").lower()
                                 if 'day or date request' in response:
                                     logging.info('day and date request')
                                     resp = detect_day1(user_message)
                                     self.history.append((message, resp))
                                     self.conversation.append([user_message1,resp])
-                                    self.dictionnaire=''
                                     return self.conversation, self.dictionnaire, log_stream.getvalue()
                                     
                                 else :
@@ -1769,7 +1736,6 @@ For each instance, provide the most accurate classification and return only the 
                                     resp = get_location_and_time()
                                     self.history.append((message, resp))
                                     self.conversation.append([user_message1,resp])
-                                    self.dictionnaire=''
                                     return self.conversation, self.dictionnaire, log_stream.getvalue()
                     
             elif 'grocery list' in data1:
@@ -1819,16 +1785,16 @@ For each instance, provide the most accurate classification and return only the 
                     for element in elements:
                         if element in ma_liste:
                             ma_liste.remove(element)    
-                if "add to grocery list" in mpt30bclas(f"""You are tasked with categorizing the given sentence "{user_message}". Determine whether the user is indicating a lack or surplus of an item. If the user's text implies a deficit (e.g., 'I'm out of [item]', 'I need more [item]', etc.), the correct categorization is 'Add to grocery list'. If the user's text implies a surplus (e.g., 'I have plenty of [item]', 'I don't need [item]', etc.), the categorization should be 'Remove from grocery list'.
-
-For instance, if the user says 'I need more bananas', the response should be 'Add to grocery list'. If the user says 'I have too many potatoes', the response should be 'Remove from grocery list'. RETURN ONLY THE ASSIGNED CATEGORY FROM THE LIST""").lower() :
+                if "add to grocery list" in jina(f"""categorize the given sentence "{self.dictionnaire}". If the user's text implies a deficit (i'm running out of item), the correct categorization is 'Add to grocery list'. If the user's text implies a surplus (i already have item) the categorization should be 'Remove from grocery list'.
+return the assigned category""").lower() :
                     logging.info("add to the grocery list")
                     logging.info(ma_liste)
-                    resp = alpaca_lora("""analyze the input to determine whether the sentiment expressed is one of acceptance (agreeing or saying "yes") or rejection (disagreeing or saying "no")""", user_message).lower()
-                    if resp == 'acceptance':
+                    resp = jina(f"""analyze this text "{user_message}" to determine whether the sentiment expressed is one of acceptance (agreeing or saying "yes") or rejection (disagreeing or saying "no").return the assigned sentiment""").lower()
+                    print(resp)
+                    if  'acceptance' in resp:
                         add_list_without_duplicates(a)
                         logging.info("acceptance to add")
-                        answer= f"Great, I've added {data} to your grocery list and your list contains : {ma_liste}"
+                        answer= f"Great, I've added {data} to your grocery list. Currently, your list includes : {ma_liste}"
                         self.history.append((message, answer))
                         self.conversation.append([user_message1,answer])
                         self.dictionnaire =''
@@ -1847,9 +1813,9 @@ For instance, if the user says 'I need more bananas', the response should be 'Ad
             
                 else : 
                     logging.info ("remove from the list")
-                    resp = alpaca_lora("""analyze the input to determine whether the sentiment expressed is one of acceptance (agreeing or saying "yes") or rejection (disagreeing or saying "no")""", user_message).lower()
-
-                    if resp == 'acceptance':
+                    resp = jina(f"""analyze this text "{user_message}" to determine whether the sentiment expressed is one of acceptance (agreeing or saying "yes") or rejection (disagreeing or saying "no").return the assigned sentiment""").lower()
+                    print (resp)
+                    if 'acceptance' in resp:
                         supprimer_elements(a)
                         if len(ma_liste)<1 :
                             answer= f"Done! You won't see {a} in your list anymore. Your list contains nothing"
@@ -1882,7 +1848,7 @@ calendar = response()
 
 with block:
     gr.Markdown("""<h1><center>🤖 ANA-Assistant 🐍</center></h1>
-                   <p><center>ANA-Assistant is a chatbot that uses the Alpaca Lora model</center></p>
+                   <p><center>ANA-Assistant is a chatbot that uses the Large Language Models</center></p>
     """)
    
     
