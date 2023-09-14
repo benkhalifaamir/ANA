@@ -1,5 +1,5 @@
 # ANA
-To get ANA up and running, follow these detailed steps:
+To get ANA up and running, follow these detailed stepss:
 
 Server Preparation:
 
