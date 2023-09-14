@@ -1,9 +1,20 @@
 # ANA
-Before you begin, ensure you have met the following requirements:
+To get ANA up and running, follow these detailed steps:
 
-You have installed the latest version of Python
+Server Preparation:
 
-You have installed and set up the mpt30b and alpaca lora  (LLMs) as per their respective documentation.
-to install them you need to run the files alpaca-lora.py, mpt30b.py, mpt30bclas.py on the server 
-You have installed the requests library. If not, install it by running pip install requests in your command line.
-Run the command python ANA.py
+Run mpt30b.py on the server.
+Execute alpacalora.py on the server.
+Setting up JinaChat:
+
+Visit JinaChat.
+Create an account.
+Obtain the API key from your account.
+Modifying the Code:
+
+Locate the section in the code where the API is referenced.
+Replace the existing API key with the one you obtained from JinaChat.
+Local Execution:
+
+On your laptop, run the file ana.py.
+Adhering to these steps will ensure the proper functioning of the latest version of ANA.
