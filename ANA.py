@@ -621,7 +621,7 @@ class response :
             self.dictionnaire= self.dictionnaire +' ' + user_message
             response = jina(f"""Determine with high precision whether this text ""{user_message}"" is:
 - Functionality Query (Example: 'What can you do?' or 'what tasks can you do?')
-- Other inquiry (Example: 'i need to remember the doctor’s appointment at the Heart Clinic can you add it to my calendar please?')
+- Other inquiry (Example: 'remind me to go to the cinema')
 return only the assigned category.""").lower()
             print(response)
             
